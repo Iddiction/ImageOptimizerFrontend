@@ -24,7 +24,10 @@ def optimize():
     elif output_format == "png":
         data, mime = process_png(raw_img)
     elif output_format == "webp":
-        data, mime = process_png(raw_img)
+        data, mime = process_webp(raw_img)
+
+    if data is None:
+        return "Server error while optimizing images.", 500
 
     return send_file(StringIO.StringIO(data), mimetype=mime)
 
@@ -45,17 +48,40 @@ def process_jpeg(raw_img):
             print "Failed to optimize image!"
 
         compressed_image = None
-        print "TMP File path", tmp_file_path
         with open(tmp_file_path, mode="rb") as f:
             compressed_image = f.read()
         os.remove(tmp_file.name)
     return compressed_image, "image/jpeg"
 
-def process_png():
-    pass
+def process_png(raw_img):
+    with Image(blob=raw_img) as img:
+        img.format = "png"
+        tmp_file = tempfile.NamedTemporaryFile(delete=False)
+        img.save(file=tmp_file)
+        tmp_file.close()
 
-def process_webp():
-    pass
+        pngout_path = get_path_for_tool("pngout")
+        tmp_file_path = os.path.normpath(tmp_file.name)
+        try:
+            subprocess.check_call([pngout_path, "-s0", "-y",  tmp_file_path])
+            print "Image optimization done!"
+        except subprocess.CalledProcessError:
+            print "Failed to optimize image!"
+
+        compressed_image = None
+        with open(tmp_file_path, mode="rb") as f:
+            compressed_image = f.read()
+        os.remove(tmp_file.name)
+    return compressed_image, "image/png"
+
+
+def process_webp(raw_img):
+    with Image(blob=raw_img) as img:
+        img.format = "webp"
+        img.compression_quality = 94
+        io = StringIO.StringIO()
+        img.save(file=io)
+    return io.getvalue(), "image/webp"
 
 def get_path_for_tool(toolname):
     if platform.platform().startswith("Darwin"):
@@ -68,4 +94,4 @@ def get_path_for_tool(toolname):
 
 
 if __name__ == "__main__":
-    app.run(debug = True)
+    app.run(processes = 3)
